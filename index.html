@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>凯达森全屋定制 — 线上运营统计系统</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --primary: #1a1a2e; --accent: #d4a853; --bg: #f0f2f5; --card: #fff;
+    --border: #e2e5ea; --text: #2c3e50; --muted: #9098a3; --success: #2ecc71;
+    --warning: #f39c12; --danger: #e74c3c; --info: #3b6df0;
+    --shadow: 0 1px 3px rgba(0,0,0,.06); --radius: 12px; --radius-sm: 8px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system,"Microsoft YaHei","PingFang SC",sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+  .topbar { background:var(--primary); color:#fff; padding:0 28px; display:flex; align-items:center; justify-content:space-between; height:60px; box-shadow:0 2px 16px rgba(0,0,0,.15); position:sticky; top:0; z-index:100; }
+  .topbar .brand { display:flex; align-items:center; gap:10px; }
+  .topbar .brand .logo { width:36px; height:36px; background:var(--accent); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; }
+  .topbar .brand h1 { font-size:18px; font-weight:700; letter-spacing:.5px; }
+  .topbar .brand h1 span { color:var(--accent); }
+  .topbar .actions { display:flex; gap:8px; align-items:center; }
+  .topbar .admin-badge { display:flex; align-items:center; gap:4px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:600; cursor:pointer; transition:all .2s; }
+  .topbar .admin-badge.locked { background:rgba(255,255,255,.1); color:rgba(255,255,255,.6); }
+  .topbar .admin-badge.unlocked { background:var(--success); color:#fff; }
+  .tab-nav { display:flex; gap:0; background:#fff; border-bottom:2px solid var(--border); padding:0 28px; position:sticky; top:60px; z-index:50; }
+  .tab-nav button { padding:14px 28px; border:none; background:none; font-size:15px; font-weight:600; cursor:pointer; color:var(--muted); font-family:inherit; transition:all .2s; border-bottom:3px solid transparent; margin-bottom:-2px; }
+  .tab-nav button:hover { color:var(--text); }
+  .tab-nav button.active { color:var(--info); border-bottom-color:var(--info); }
+  .container { max-width:1500px; margin:0 auto; padding:20px 24px; }
+  .tab-content { display:none; } .tab-content.active { display:block; }
+  .stat-row { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px; }
+  .stat-card { background:#fff; border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow); border:1px solid var(--border); display:flex; flex-direction:column; gap:6px; }
+  .stat-card .s-label { font-size:13px; color:var(--muted); font-weight:500; }
+  .stat-card .s-value { font-size:34px; font-weight:800; line-height:1; }
+  .stat-card .s-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+  .stat-card.c1 .s-value { color:#3b6df0; } .stat-card.c2 .s-value { color:#1a1a2e; }
+  .stat-card.c3 .s-value { color:#2ecc71; } .stat-card.c4 .s-value { color:#d4a853; }
+  .stat-card.c5 .s-value { color:#e74c3c; }
+  .card { background:#fff; border-radius:var(--radius); padding:24px; box-shadow:var(--shadow); border:1px solid var(--border); margin-bottom:20px; }
+  .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+  .card-header h2 { font-size:17px; font-weight:700; display:flex; align-items:center; gap:8px; }
+  .card-header h2 .dot { width:8px; height:8px; border-radius:50%; background:var(--accent); }
+  .form-section { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .form-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .fg { display:flex; flex-direction:column; gap:4px; }
+  .fg label { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; }
+  .fg input,.fg select,.fg textarea { padding:9px 12px; border:1.5px solid var(--border); border-radius:var(--radius-sm); font-size:13px; font-family:inherit; background:#fafbfc; transition:all .15s; }
+  .fg input:focus,.fg select:focus,.fg textarea:focus { border-color:var(--info); background:#fff; outline:none; box-shadow:0 0 0 3px rgba(59,109,240,.08); }
+  .fg textarea { resize:vertical; min-height:56px; }
+  .btn { padding:10px 20px; border:none; border-radius:var(--radius-sm); font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .btn-primary { background:var(--info); color:#fff; } .btn-primary:hover { background:#2c5ed6; transform:translateY(-1px); box-shadow:0 4px 12px rgba(59,109,240,.3); }
+  .btn-success { background:var(--success); color:#fff; } .btn-warning { background:var(--warning); color:#fff; }
+  .btn-outline { background:#fff; color:var(--text); border:1.5px solid var(--border); } .btn-outline:hover { background:#f5f6f8; }
+  .btn-ghost { background:none; color:var(--muted); border:none; padding:6px 10px; } .btn-ghost:hover { color:var(--text); background:#f0f2f5; border-radius:6px; }
+  .btn-sm { padding:5px 12px; font-size:12px; } .btn-xs { padding:3px 8px; font-size:11px; border-radius:4px; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; transform:none!important; box-shadow:none!important; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  thead th { background:#f7f8fa; padding:12px 8px; text-align:left; font-weight:700; border-bottom:2px solid var(--border); white-space:nowrap; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.3px; position:sticky; top:0; }
+  tbody td { padding:10px 8px; border-bottom:1px solid #f0f2f5; vertical-align:middle; }
+  tbody tr { transition:background .1s; } tbody tr:hover { background:#f8faff; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .b-visit{background:#eef2ff;color:#3b6df0;} .b-measure{background:#e6faf2;color:#1abc9c;}
+  .b-design{background:#fff8eb;color:#e67e22;} .b-quote{background:#fef2e5;color:#d4740b;}
+  .b-signed{background:#e3fce9;color:#219a5a;} .b-prod{background:#f3eafa;color:#7c3aed;}
+  .b-install{background:#e0f2fe;color:#0c6ba8;} .b-pending{background:#fff0f0;color:#d92d20;}
+  .b-done{background:#e3fce9;color:#15803d;} .b-lost{background:#fde8e8;color:#b91c1c;}
+  .b-after{background:#fef7e0;color:#b45309;}
+  .filter-bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px 16px; background:#f7f8fa; border-radius:var(--radius-sm); margin-bottom:14px; }
+  .filter-bar input,.filter-bar select { padding:7px 10px; border:1.5px solid var(--border); border-radius:6px; font-size:12px; font-family:inherit; background:#fff; }
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; justify-content:center; align-items:flex-start; padding:30px 16px; overflow-y:auto; backdrop-filter:blur(2px); }
+  .modal-overlay.active { display:flex; }
+  .modal-dialog { background:#fff; border-radius:16px; width:100%; max-width:800px; box-shadow:0 24px 60px rgba(0,0,0,.2); animation:slideUp .2s ease; }
+  @keyframes slideUp { from{opacity:0;transform:translateY(24px);} to{opacity:1;transform:translateY(0);} }
+  .modal-header { display:flex; align-items:center; justify-content:space-between; padding:20px 24px; border-bottom:1px solid var(--border); }
+  .modal-header h3 { font-size:18px; }
+  .modal-close { width:36px; height:36px; border:none; background:none; font-size:20px; cursor:pointer; color:var(--muted); border-radius:50%; transition:all .15s; }
+  .modal-close:hover { background:#f0f2f5; color:var(--text); }
+  .modal-body { padding:20px 24px; max-height:60vh; overflow-y:auto; }
+  .modal-footer { display:flex; gap:10px; justify-content:flex-end; padding:16px 24px; border-top:1px solid var(--border); }
+  .dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .dash-full { grid-column:1/-1; }
+  .bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; height:100%; justify-content:flex-end; }
+  .bar-fill { width:100%; max-width:48px; border-radius:6px 6px 0 0; transition:height .4s ease; min-height:4px; position:relative; }
+  .bar-fill .bar-val { position:absolute; top:-20px; left:50%; transform:translateX(-50%); font-size:11px; font-weight:700; white-space:nowrap; }
+  .bar-label { font-size:11px; color:var(--muted); font-weight:500; }
+  .progress-row { display:flex; align-items:center; gap:10px; padding:8px 0; }
+  .progress-row .p-label { width:100px; font-size:13px; font-weight:600; text-align:right; flex-shrink:0; }
+  .progress-row .p-bar-wrap { flex:1; height:22px; background:#f0f2f5; border-radius:11px; overflow:hidden; }
+  .progress-row .p-bar-fill { height:100%; border-radius:11px; transition:width .4s ease; display:flex; align-items:center; justify-content:flex-end; padding-right:10px; }
+  .progress-row .p-bar-fill span { font-size:11px; font-weight:700; color:#fff; }
+  .progress-row .p-val { width:65px; font-size:12px; color:var(--muted); text-align:left; }
+  .hint { font-size:12px; color:var(--muted); margin-top:-4px; }
+  .empty-state { text-align:center; padding:48px 20px; color:var(--muted); }
+  .empty-state .icon { font-size:48px; margin-bottom:12px; }
+  .setup-banner { background:#fff3cd; border:1px solid #ffc107; border-radius:var(--radius); padding:16px 20px; margin-bottom:20px; font-size:13px; line-height:1.8; }
+  .setup-banner strong { color:#856404; }
+  .toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:8px; color:#fff; font-size:13px; font-weight:600; z-index:2000; animation:slideUp .3s ease; box-shadow:0 8px 24px rgba(0,0,0,.15); }
+  .toast.success { background:var(--success); } .toast.error { background:var(--danger); } .toast.info { background:var(--info); }
+  @media(max-width:1200px){.form-section{grid-template-columns:1fr;}.dash-grid{grid-template-columns:1fr;}.stat-row{grid-template-columns:repeat(3,1fr);}}
+  @media(max-width:768px){.form-grid{grid-template-columns:repeat(2,1fr);}.stat-row{grid-template-columns:repeat(2,1fr);}.tab-nav button{padding:12px 16px;font-size:13px;}.modal-dialog{max-width:95vw;}}
+  @media(max-width:480px){.form-grid{grid-template-columns:1fr;}.stat-row{grid-template-columns:1fr 1fr;}}
+  .loading-overlay { display:none; position:fixed; inset:0; background:rgba(255,255,255,.7); z-index:3000; justify-content:center; align-items:center; font-size:16px; color:var(--info); font-weight:600; }
+  .loading-overlay.active { display:flex; }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay"><div>⏳ 数据加载中…</div></div>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="brand"><div class="logo">K</div><h1>凯达森<span>全屋定制</span> · 运营统计系统</h1></div>
+  <div class="actions">
+    <span class="admin-badge locked" id="adminBadge" onclick="toggleAdmin()" title="点击解锁管理功能">🔒 仅查看</span>
+    <button class="btn btn-outline btn-sm" onclick="exportCSV()" style="color:#fff;border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08);">📥 导出CSV</button>
+    <button class="btn btn-warning btn-sm" onclick="exportExcel()">📊 导出Excel</button>
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.12);color:#fff;" onclick="clearAll()" id="btnClear" disabled>🗑 清空</button>
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.12);color:#fff;" onclick="openImportModal()" id="btnImport">📤 导入数据</button>
+  </div>
+</div>
+
+<!-- Tab Nav -->
+<div class="tab-nav">
+  <button class="active" onclick="switchTab('entry')">📝 数据录入</button>
+  <button onclick="switchTab('dashboard')">📊 数据看板</button>
+</div>
+
+<!-- Password Toast -->
+<div id="pwdToast" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;padding:28px 32px;z-index:4000;box-shadow:0 24px 60px rgba(0,0,0,.25);text-align:center;min-width:300px;">
+  <h3 style="margin-bottom:8px;">🔐 管理密码</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">输入密码后可新增/编辑/删除数据</p>
+  <input type="password" id="adminPwdInput" placeholder="请输入管理密码" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;text-align:center;margin-bottom:12px;" onkeydown="if(event.key==='Enter')verifyAdmin()">
+  <div style="display:flex;gap:8px;justify-content:center;">
+    <button class="btn btn-outline btn-sm" onclick="closePwdPrompt()">取消</button>
+    <button class="btn btn-primary btn-sm" onclick="verifyAdmin()">✅ 解锁</button>
+  </div>
+  <p id="pwdError" style="color:var(--danger);font-size:12px;margin-top:8px;display:none;">密码错误，请重试</p>
+</div>
+<div id="pwdBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:3999;" onclick="closePwdPrompt()"></div>
+
+<div class="container">
+
+<!-- ===== TAB: Entry ===== -->
+<div class="tab-content active" id="tab-entry">
+
+  <!-- Setup Banner (shown when Supabase not configured) -->
+  <div class="setup-banner" id="setupBanner" style="display:none;">
+    <strong>⚠️ 尚未配置数据库</strong><br>
+    1. 前往 <a href="https://supabase.com" target="_blank">supabase.com</a> 注册并创建项目<br>
+    2. 在项目 Settings → API 中复制 <b>Project URL</b> 和 <b>anon public key</b><br>
+    3. 打开此 HTML 文件，找到顶部 <code>SUPABASE_URL</code> 和 <code>SUPABASE_KEY</code> 替换为你的值<br>
+    4. 在 Supabase SQL Editor 中运行 <code>supabase_setup.sql</code> 创建数据表<br>
+    5. 刷新页面即可开始使用
+  </div>
+
+  <div class="stat-row" id="statCards"></div>
+
+  <div class="form-section">
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-header"><h2><span class="dot"></span>➕ 新增客户记录</h2><span class="hint">只需填姓名，其余信息随时补充</span></div>
+
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>到店日期</label><input type="date" id="fDate"></div>
+        <div class="fg"><label>客户姓名 *</label><input type="text" id="fName" placeholder="必填"></div>
+        <div class="fg"><label>联系电话</label><input type="tel" id="fPhone" placeholder="手机号"></div>
+        <div class="fg"><label>微信号</label><input type="text" id="fWechat" placeholder="微信"></div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>客户来源</label>
+          <select id="fSource"><option value="抖音">抖音</option><option value="小红书">小红书</option><option value="微信视频号">微信视频号</option><option value="转介绍">转介绍</option><option value="路过">路过</option><option value="其他">其他</option></select>
+        </div>
+        <div class="fg"><label>推广账号</label><input type="text" id="fAccount" placeholder="哪个账号来的"></div>
+        <div class="fg"><label>小区名称</label><input type="text" id="fCommunity" placeholder="例：万科城"></div>
+        <div class="fg"><label>楼号/房号</label><input type="text" id="fRoom" placeholder="例：3-1-502"></div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>品牌</label>
+          <select id="fBrand"><option value="">未选</option><option value="兔宝宝">兔宝宝</option><option value="千年舟">千年舟</option><option value="万华">万华</option><option value="莫干山">莫干山</option><option value="众人拾柴">众人拾柴</option><option value="韩式">韩式</option><option value="福人">福人</option><option value="鲁丽">鲁丽</option><option value="大王椰">大王椰</option><option value="鹏鸿">鹏鸿</option><option value="金利源">金利源</option><option value="水性科天">水性科天</option><option value="爱格(进口)">爱格(进口)</option><option value="可丽芙(进口)">可丽芙(进口)</option><option value="其他品牌">其他品牌</option></select>
+        </div>
+        <div class="fg"><label>基材</label>
+          <select id="fMaterial"><option value="">未选</option><option value="颗粒板">颗粒板</option><option value="多层实木">多层实木</option><option value="欧松板(OSB)">欧松板(OSB)</option><option value="生态板(杉木芯)">生态板(杉木芯)</option><option value="橡木板">橡木板</option><option value="实木">实木</option><option value="密度板">密度板</option><option value="PET门板">PET门板</option><option value="混油/烤漆">混油/烤漆</option><option value="其他基材">其他基材</option></select>
+        </div>
+        <div class="fg"><label>投影面积(㎡)</label><input type="number" id="fArea" placeholder="㎡" min="0" step="0.1"></div>
+        <div class="fg"><label>投影单价(元/㎡)</label><input type="number" id="fUnitPrice" placeholder="元/㎡" min="0"></div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>板材单价(元)</label><input type="number" id="fMatPrice" placeholder="板材单价" min="0"></div>
+        <div class="fg"><label>合同金额(元)</label><input type="number" id="fAmount" placeholder="自动=面积×单价" min="0"></div>
+        <div class="fg"><label>定金(元)</label><input type="number" id="fDeposit" placeholder="已收定金" min="0"></div>
+        <div class="fg"><label>尾款(元)</label><input type="number" id="fBalance" placeholder="待收尾款" min="0"></div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>当前状态</label>
+          <select id="fStatus"><option value="到店咨询">到店咨询</option><option value="已量尺">已量尺</option><option value="已出方案">已出方案</option><option value="已报价">已报价</option><option value="已签单">已签单</option><option value="复尺下单中">复尺下单中</option><option value="已安装">已安装</option><option value="待尾款">待尾款</option><option value="已完成">已完成</option><option value="已流失">已流失</option><option value="售后中">售后中</option></select>
+        </div>
+        <div class="fg"><label>设计师</label><input type="text" id="fDesigner" placeholder="设计师"></div>
+        <div class="fg"><label>装修风格</label><input type="text" id="fStyle" placeholder="例：现代简约"></div>
+        <div class="fg"><label>预计签单日期</label><input type="date" id="fExpectDate"></div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>安装师傅</label><input type="text" id="fInstaller" placeholder="安装师傅"></div>
+        <div class="fg"><label>安装日期</label><input type="date" id="fInstallDate"></div>
+        <div class="fg"><label>售后状态</label>
+          <select id="fAfterSales"><option value="">无</option><option value="正常">正常</option><option value="售后处理中">售后处理中</option><option value="售后完成">售后完成</option></select>
+        </div>
+        <div class="fg"><label>报价单号</label><input type="text" id="fQuoteNo" placeholder="报价单号"></div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg" style="grid-column:1/-1;"><label>备注</label><textarea id="fNote" placeholder="客户需求、沟通记录、特殊要求…"></textarea></div>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="addRecord()" id="btnAdd">✅ 添加记录</button>
+        <button class="btn btn-outline btn-sm" onclick="resetForm()">↺ 重置</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:0;">
+        <div class="card-header"><h2><span class="dot"></span>📋 今日到店</h2><span style="font-size:12px;color:var(--muted);" id="todayDate"></span></div>
+        <div id="todayList" style="max-height:400px;overflow-y:auto;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2><span class="dot"></span>📋 全部客户记录</h2><span style="font-size:12px;color:var(--muted);">点击 ✏️编辑 补全信息 · 状态下拉框可直接切换</span></div>
+    <div class="filter-bar">
+      <input type="date" id="filterDate" onchange="renderTable()" title="按日期筛选">
+      <input type="text" id="filterCommunity" placeholder="搜小区…" oninput="renderTable()" style="width:100px;">
+      <input type="text" id="filterName" placeholder="搜姓名…" oninput="renderTable()" style="width:100px;">
+      <select id="filterStatus" onchange="renderTable()"><option value="">全部状态</option><option value="到店咨询">到店咨询</option><option value="已量尺">已量尺</option><option value="已出方案">已出方案</option><option value="已报价">已报价</option><option value="已签单">已签单</option><option value="复尺下单中">复尺下单中</option><option value="已安装">已安装</option><option value="待尾款">待尾款</option><option value="已完成">已完成</option><option value="已流失">已流失</option><option value="售后中">售后中</option></select>
+      <select id="filterSource" onchange="renderTable()"><option value="">全部来源</option><option value="抖音">抖音</option><option value="小红书">小红书</option><option value="微信视频号">微信视频号</option><option value="转介绍">转介绍</option><option value="路过">路过</option><option value="其他">其他</option></select>
+      <select id="filterBrand" onchange="renderTable()"><option value="">全部品牌</option><option value="兔宝宝">兔宝宝</option><option value="千年舟">千年舟</option><option value="万华">万华</option><option value="莫干山">莫干山</option><option value="众人拾柴">众人拾柴</option><option value="韩式">韩式</option><option value="福人">福人</option><option value="鲁丽">鲁丽</option><option value="大王椰">大王椰</option><option value="鹏鸿">鹏鸿</option><option value="金利源">金利源</option><option value="水性科天">水性科天</option><option value="爱格(进口)">爱格(进口)</option><option value="可丽芙(进口)">可丽芙(进口)</option><option value="其他品牌">其他品牌</option></select>
+      <select id="filterMaterial" onchange="renderTable()"><option value="">全部基材</option><option value="颗粒板">颗粒板</option><option value="多层实木">多层实木</option><option value="欧松板(OSB)">欧松板(OSB)</option><option value="生态板(杉木芯)">生态板(杉木芯)</option><option value="橡木板">橡木板</option><option value="实木">实木</option><option value="密度板">密度板</option><option value="PET门板">PET门板</option><option value="混油/烤漆">混油/烤漆</option><option value="其他基材">其他基材</option></select>
+      <span style="margin-left:auto;font-size:12px;color:var(--muted);" id="recordCount"></span>
+      <span id="syncIndicator" style="font-size:11px;color:var(--success);display:none;">🟢 实时同步中</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>日期</th><th>姓名</th><th>电话</th><th>小区</th><th>来源</th><th>品牌</th><th>基材</th><th>面积</th><th>合同金额</th><th>定金</th><th>状态</th><th>设计师</th><th>备注</th><th>操作</th></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TAB: Dashboard ===== -->
+<div class="tab-content" id="tab-dashboard">
+  <div class="stat-row" id="dashStats"></div>
+  <div class="dash-grid">
+    <div class="card"><div class="card-header"><h2><span class="dot"></span>📈 客户来源分析</h2></div><div id="sourceChart"></div></div>
+    <div class="card"><div class="card-header"><h2><span class="dot"></span>🪵 品牌+基材选用分析</h2></div><div id="materialChart"></div></div>
+    <div class="card dash-full"><div class="card-header"><h2><span class="dot"></span>📅 月度数据趋势（2026年）</h2></div><div id="monthlyChart"></div></div>
+    <div class="card dash-full"><div class="card-header"><h2><span class="dot"></span>🔽 销售漏斗</h2></div><div id="funnelChart"></div></div>
+    <div class="card dash-full"><div class="card-header"><h2><span class="dot"></span>🏆 最近签单客户</h2><button class="btn btn-outline btn-sm" onclick="exportExcel()">📊 导出Excel报表</button></div>
+      <div class="table-wrap"><table><thead><tr><th>日期</th><th>姓名</th><th>小区</th><th>品牌</th><th>基材</th><th>面积</th><th>合同金额</th><th>定金</th><th>尾款</th><th>设计师</th><th>状态</th></tr></thead><tbody id="signedTable"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal-dialog">
+    <div class="modal-header"><h3>✏️ 编辑客户完整信息</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="editId">
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>到店日期</label><input type="date" id="editDate"></div>
+        <div class="fg"><label>客户姓名 *</label><input type="text" id="editName"></div>
+        <div class="fg"><label>联系电话</label><input type="tel" id="editPhone"></div>
+        <div class="fg"><label>微信号</label><input type="text" id="editWechat"></div>
+      </div>
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>客户来源</label><select id="editSource"><option value="抖音">抖音</option><option value="小红书">小红书</option><option value="微信视频号">微信视频号</option><option value="转介绍">转介绍</option><option value="路过">路过</option><option value="其他">其他</option></select></div>
+        <div class="fg"><label>推广账号</label><input type="text" id="editAccount"></div>
+        <div class="fg"><label>小区名称</label><input type="text" id="editCommunity"></div>
+        <div class="fg"><label>楼号/房号</label><input type="text" id="editRoom"></div>
+      </div>
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>品牌</label><select id="editBrand"><option value="">未选</option><option value="兔宝宝">兔宝宝</option><option value="千年舟">千年舟</option><option value="万华">万华</option><option value="莫干山">莫干山</option><option value="众人拾柴">众人拾柴</option><option value="韩式">韩式</option><option value="福人">福人</option><option value="鲁丽">鲁丽</option><option value="大王椰">大王椰</option><option value="鹏鸿">鹏鸿</option><option value="金利源">金利源</option><option value="水性科天">水性科天</option><option value="爱格(进口)">爱格(进口)</option><option value="可丽芙(进口)">可丽芙(进口)</option><option value="其他品牌">其他品牌</option></select></div>
+        <div class="fg"><label>基材</label><select id="editMaterial"><option value="">未选</option><option value="颗粒板">颗粒板</option><option value="多层实木">多层实木</option><option value="欧松板(OSB)">欧松板(OSB)</option><option value="生态板(杉木芯)">生态板(杉木芯)</option><option value="橡木板">橡木板</option><option value="实木">实木</option><option value="密度板">密度板</option><option value="PET门板">PET门板</option><option value="混油/烤漆">混油/烤漆</option><option value="其他基材">其他基材</option></select></div>
+        <div class="fg"><label>板材单价</label><input type="number" id="editMatPrice" min="0"></div>
+        <div class="fg"><label>投影面积(㎡)</label><input type="number" id="editArea" min="0" step="0.1"></div>
+      </div>
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>投影单价(元/㎡)</label><input type="number" id="editUnitPrice" min="0"></div>
+        <div class="fg"><label>合同金额</label><input type="number" id="editAmount" min="0"></div>
+        <div class="fg"><label>定金</label><input type="number" id="editDeposit" min="0"></div>
+        <div class="fg"><label>尾款</label><input type="number" id="editBalance" min="0"></div>
+      </div>
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>当前状态</label><select id="editStatus"><option value="到店咨询">到店咨询</option><option value="已量尺">已量尺</option><option value="已出方案">已出方案</option><option value="已报价">已报价</option><option value="已签单">已签单</option><option value="复尺下单中">复尺下单中</option><option value="已安装">已安装</option><option value="待尾款">待尾款</option><option value="已完成">已完成</option><option value="已流失">已流失</option><option value="售后中">售后中</option></select></div>
+        <div class="fg"><label>设计师</label><input type="text" id="editDesigner"></div>
+        <div class="fg"><label>装修风格</label><input type="text" id="editStyle"></div>
+        <div class="fg"><label>预计签单日期</label><input type="date" id="editExpectDate"></div>
+      </div>
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="fg"><label>安装师傅</label><input type="text" id="editInstaller"></div>
+        <div class="fg"><label>安装日期</label><input type="date" id="editInstallDate"></div>
+        <div class="fg"><label>售后状态</label><select id="editAfterSales"><option value="">无</option><option value="正常">正常</option><option value="售后处理中">售后处理中</option><option value="售后完成">售后完成</option></select></div>
+        <div class="fg"><label>报价单号</label><input type="text" id="editQuoteNo"></div>
+      </div>
+      <div class="form-grid"><div class="fg" style="grid-column:1/-1;"><label>备注</label><textarea id="editNote" placeholder="客户需求、沟通记录…"></textarea></div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveEdit()">💾 保存修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal-dialog" style="max-width:600px;">
+    <div class="modal-header"><h3>📤 导入数据</h3><button class="modal-close" onclick="closeImportModal()">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">将旧版数据迁移到线上数据库。请先在旧版页面中按 <b>F12</b> 打开控制台，粘贴运行以下命令：</p>
+      <div style="background:#1a1a2e;color:#2ecc71;padding:12px 16px;border-radius:8px;font-size:12px;font-family:monospace;margin-bottom:16px;word-break:break-all;">copy(JSON.stringify(JSON.parse(localStorage.getItem('kaidasen_v3')), null, 2))</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">运行后数据已复制到剪贴板，粘贴到下方输入框中，点击导入即可。</p>
+      <textarea id="importData" placeholder="在此粘贴 JSON 数据…" style="width:100%;height:200px;font-family:monospace;font-size:12px;padding:12px;border:1.5px solid var(--border);border-radius:8px;resize:vertical;"></textarea>
+      <p style="font-size:12px;color:var(--danger);margin-top:8px;">⚠️ 导入会覆盖现有数据，请确认无误后再操作</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeImportModal()">取消</button>
+      <button class="btn btn-primary" onclick="importData()">📤 导入</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════ 配置 ═══════════════════════════
+// !! 部署前请替换为你的 Supabase 项目信息 !!
+// 在 supabase.com 创建项目后，进入 Settings → API 复制以下两个值
+const SUPABASE_URL = 'https://zdymirwnzgqxgoisgiob.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_9z-ZH8mCcGrJ3lKS2FqbvA_CrJK722T';
+const ADMIN_PASSWORD = 'kaidasen2024';             // 管理密码，上线后请修改
+
+// ═══════════════════════════ 常量 ═══════════════════════════
+const TABLE_NAME = 'customers';
+const BRANDS = ['兔宝宝','千年舟','万华','莫干山','众人拾柴','韩式','福人','鲁丽','大王椰','鹏鸿','金利源','水性科天','爱格(进口)','可丽芙(进口)','其他品牌'];
+const MATERIALS = ['颗粒板','多层实木','欧松板(OSB)','生态板(杉木芯)','橡木板','实木','密度板','PET门板','混油/烤漆','其他基材'];
+const STATUSES = ['到店咨询','已量尺','已出方案','已报价','已签单','复尺下单中','已安装','待尾款','已完成','已流失','售后中'];
+const SOURCES = ['抖音','小红书','微信视频号','转介绍','路过','其他'];
+const STATUS_BADGE = {'到店咨询':'b-visit','已量尺':'b-measure','已出方案':'b-design','已报价':'b-quote','已签单':'b-signed','复尺下单中':'b-prod','已安装':'b-install','待尾款':'b-pending','已完成':'b-done','已流失':'b-lost','售后中':'b-after'};
+const CLOSED_STATUSES = ['已签单','复尺下单中','已安装','待尾款','已完成'];
+
+// ═══════════════════════════ 状态 ═══════════════════════════
+let currentData = [];
+let isAdmin = false;
+let supabase = null;
+let isConfigured = false;
+let realtimeChannel = null;
+
+// ═══════════════════════════ 初始化 Supabase ═══════════════════════════
+function initSupabase() {
+  if (SUPABASE_URL.includes('YOUR_') || SUPABASE_KEY.includes('YOUR_')) {
+    isConfigured = false;
+    document.getElementById('setupBanner').style.display = 'block';
+    showToast('⚠️ 请先配置 Supabase 连接信息', 'info');
+    return false;
+  }
+  try {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    isConfigured = true;
+    document.getElementById('setupBanner').style.display = 'none';
+    return true;
+  } catch(e) {
+    isConfigured = false;
+    showToast('数据库连接失败：' + e.message, 'error');
+    return false;
+  }
+}
+
+// ═══════════════════════════ 数据映射 ═══════════════════════════
+// Supabase (snake_case) → JS (camelCase)
+function mapRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    date: row.date || '',
+    name: row.name || '',
+    phone: row.phone || '',
+    wechat: row.wechat || '',
+    source: row.source || '抖音',
+    account: row.account || '',
+    community: row.community || '',
+    room: row.room || '',
+    brand: row.brand || '',
+    material: row.material || '',
+    matPrice: Number(row.mat_price) || 0,
+    area: Number(row.area) || 0,
+    unitPrice: Number(row.unit_price) || 0,
+    amount: Number(row.amount) || 0,
+    deposit: Number(row.deposit) || 0,
+    balance: Number(row.balance) || 0,
+    totalRcvd: (Number(row.deposit) || 0) + (Number(row.balance) || 0),
+    status: row.status || '到店咨询',
+    quoteNo: row.quote_no || '',
+    expectDate: row.expect_date || '',
+    designer: row.designer || '',
+    style: row.style || '',
+    installer: row.installer || '',
+    installDate: row.install_date || '',
+    afterSales: row.after_sales || '',
+    note: row.note || '',
+    createdAt: row.created_at || new Date().toISOString(),
+  };
+}
+
+// JS (camelCase) → Supabase (snake_case)
+function toRow(record) {
+  return {
+    id: record.id,
+    date: record.date,
+    name: record.name,
+    phone: record.phone || '',
+    wechat: record.wechat || '',
+    source: record.source || '抖音',
+    account: record.account || '',
+    community: record.community || '',
+    room: record.room || '',
+    brand: record.brand || '',
+    material: record.material || '',
+    mat_price: Number(record.matPrice) || 0,
+    area: Number(record.area) || 0,
+    unit_price: Number(record.unitPrice) || 0,
+    amount: Number(record.amount) || 0,
+    deposit: Number(record.deposit) || 0,
+    balance: Number(record.balance) || 0,
+    status: record.status || '到店咨询',
+    quote_no: record.quoteNo || '',
+    expect_date: record.expectDate || '',
+    designer: record.designer || '',
+    style: record.style || '',
+    installer: record.installer || '',
+    install_date: record.installDate || '',
+    after_sales: record.afterSales || '',
+    note: record.note || '',
+    created_at: record.createdAt || new Date().toISOString(),
+  };
+}
+
+// ═══════════════════════════ 数据层 ═══════════════════════════
+async function loadData() {
+  if (!isConfigured || !supabase) return [];
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .select('*')
+    .order('id', { ascending: false })
+    .limit(5000);
+  if (error) { console.error('Load error:', error); showToast('加载数据失败：' + error.message, 'error'); return currentData; }
+  currentData = (data || []).map(mapRow);
+  return currentData;
+}
+
+async function insertRecord(record) {
+  if (!isConfigured || !supabase) return false;
+  const row = toRow(record);
+  const { error } = await supabase.from(TABLE_NAME).insert(row);
+  if (error) { showToast('添加失败：' + error.message, 'error'); return false; }
+  return true;
+}
+
+async function updateRecord(id, updates) {
+  if (!isConfigured || !supabase) return false;
+  const row = toRow({...updates, id: id});
+  const { error } = await supabase.from(TABLE_NAME).update(row).eq('id', id);
+  if (error) { showToast('更新失败：' + error.message, 'error'); return false; }
+  return true;
+}
+
+async function deleteRecordDB(id) {
+  if (!isConfigured || !supabase) return false;
+  const { error } = await supabase.from(TABLE_NAME).delete().eq('id', id);
+  if (error) { showToast('删除失败：' + error.message, 'error'); return false; }
+  return true;
+}
+
+async function clearAllDB() {
+  if (!isConfigured || !supabase) return false;
+  const { error } = await supabase.from(TABLE_NAME).delete().neq('id', 0); // delete all
+  if (error) { showToast('清空失败：' + error.message, 'error'); return false; }
+  return true;
+}
+
+async function importRecords(records) {
+  if (!isConfigured || !supabase) return false;
+  if (!records || records.length === 0) return false;
+  const rows = records.map(toRow);
+  // Batch insert in chunks of 500
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500);
+    const { error } = await supabase.from(TABLE_NAME).insert(chunk);
+    if (error) { showToast('导入失败（第' + (i+1) + '条）：' + error.message, 'error'); return false; }
+  }
+  return true;
+}
+
+// ═══════════════════════════ 实时订阅 ═══════════════════════════
+function subscribeRealtime() {
+  if (!isConfigured || !supabase) return;
+  if (realtimeChannel) { supabase.removeChannel(realtimeChannel); }
+  realtimeChannel = supabase
+    .channel('customers-realtime')
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: TABLE_NAME },
+      (payload) => {
+        console.log('Realtime update:', payload.eventType);
+        document.getElementById('syncIndicator').style.display = 'inline';
+        setTimeout(() => { document.getElementById('syncIndicator').style.display = 'none'; }, 2000);
+        refreshAll();
+      }
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('Realtime connected');
+        document.getElementById('syncIndicator').style.display = 'inline';
+      }
+    });
+}
+
+// ═══════════════════════════ 管理密码 ═══════════════════════════
+function toggleAdmin() {
+  if (isAdmin) {
+    // Lock
+    isAdmin = false;
+    sessionStorage.removeItem('kaidasen_admin');
+    updateAdminUI();
+    showToast('已锁定，仅可查看数据', 'info');
+  } else {
+    // Show password prompt
+    showPwdPrompt();
+  }
+}
+
+function showPwdPrompt() {
+  document.getElementById('pwdToast').style.display = 'block';
+  document.getElementById('pwdBackdrop').style.display = 'block';
+  document.getElementById('adminPwdInput').value = '';
+  document.getElementById('pwdError').style.display = 'none';
+  setTimeout(() => document.getElementById('adminPwdInput').focus(), 100);
+}
+
+function closePwdPrompt() {
+  document.getElementById('pwdToast').style.display = 'none';
+  document.getElementById('pwdBackdrop').style.display = 'none';
+}
+
+function verifyAdmin() {
+  const input = document.getElementById('adminPwdInput').value.trim();
+  if (input === ADMIN_PASSWORD) {
+    isAdmin = true;
+    sessionStorage.setItem('kaidasen_admin', 'true');
+    closePwdPrompt();
+    updateAdminUI();
+    showToast('🔓 已解锁管理权限，可编辑数据', 'success');
+  } else {
+    document.getElementById('pwdError').style.display = 'block';
+    document.getElementById('adminPwdInput').value = '';
+    document.getElementById('adminPwdInput').focus();
+  }
+}
+
+function updateAdminUI() {
+  const badge = document.getElementById('adminBadge');
+  const btnAdd = document.getElementById('btnAdd');
+  const btnClear = document.getElementById('btnClear');
+  if (isAdmin) {
+    badge.className = 'admin-badge unlocked';
+    badge.innerHTML = '🔓 管理员';
+    btnAdd.disabled = false;
+    btnClear.disabled = false;
+  } else {
+    badge.className = 'admin-badge locked';
+    badge.innerHTML = '🔒 仅查看';
+    btnAdd.disabled = true;
+    btnClear.disabled = true;
+  }
+}
+
+// 检查写操作权限，无权限则弹出密码框
+function requireAdmin() {
+  if (!isAdmin) {
+    showPwdPrompt();
+    return false;
+  }
+  return true;
+}
+
+// 页面加载时从 session 恢复
+function restoreAdmin() {
+  if (sessionStorage.getItem('kaidasen_admin') === 'true') {
+    isAdmin = true;
+    updateAdminUI();
+  }
+}
+
+// ═══════════════════════════ 工具函数 ═══════════════════════════
+function todayStr() { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtMoney(n) { if(!n||n==0) return '—'; return '¥'+Number(n).toLocaleString('zh-CN'); }
+
+function showToast(msg, type) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.className = 'toast ' + (type || 'info');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { if (t.parentNode) t.remove(); }, 2500);
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-nav button').forEach((b,i)=>{ b.classList.toggle('active',(i===0&&name==='entry')||(i===1&&name==='dashboard')); });
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if(name==='dashboard') renderDashboard();
+}
+
+// ═══════════════════════════ 表单计算 ═══════════════════════════
+function bindCalc(pfx){
+  const areaEl=document.getElementById(pfx+'Area'),upEl=document.getElementById(pfx+'UnitPrice'),amtEl=document.getElementById(pfx+'Amount');
+  if(!areaEl||!upEl||!amtEl) return;
+  function calc(){ if(amtEl.dataset.manual==='true') return; const a=parseFloat(areaEl.value)||0,u=parseFloat(upEl.value)||0; if(a>0&&u>0) amtEl.value=Math.round(a*u); }
+  areaEl.addEventListener('input',calc); upEl.addEventListener('input',calc);
+  amtEl.addEventListener('input',()=>{amtEl.dataset.manual='true';});
+}
+
+// ═══════════════════════════ 表单数据 ═══════════════════════════
+function getFormData(pfx){
+  return {
+    date:document.getElementById(pfx+'Date').value||todayStr(),
+    name:document.getElementById(pfx+'Name').value.trim(),
+    phone:document.getElementById(pfx+'Phone').value.trim(),
+    wechat:(document.getElementById(pfx+'Wechat')?.value||'').trim(),
+    source:document.getElementById(pfx+'Source').value,
+    account:(document.getElementById(pfx+'Account')?.value||'').trim(),
+    community:document.getElementById(pfx+'Community').value.trim(),
+    room:(document.getElementById(pfx+'Room')?.value||'').trim(),
+    brand:(document.getElementById(pfx+'Brand')?.value||''),
+    material:document.getElementById(pfx+'Material').value,
+    matPrice:Number(document.getElementById(pfx+'MatPrice')?.value)||0,
+    area:Number(document.getElementById(pfx+'Area').value)||0,
+    unitPrice:Number(document.getElementById(pfx+'UnitPrice').value)||0,
+    amount:Number(document.getElementById(pfx+'Amount').value)||0,
+    deposit:Number(document.getElementById(pfx+'Deposit')?.value)||0,
+    balance:Number(document.getElementById(pfx+'Balance')?.value)||0,
+    status:document.getElementById(pfx+'Status').value,
+    quoteNo:(document.getElementById(pfx+'QuoteNo')?.value||'').trim(),
+    expectDate:(document.getElementById(pfx+'ExpectDate')?.value||''),
+    designer:(document.getElementById(pfx+'Designer')?.value||'').trim(),
+    style:(document.getElementById(pfx+'Style')?.value||'').trim(),
+    installer:(document.getElementById(pfx+'Installer')?.value||'').trim(),
+    installDate:(document.getElementById(pfx+'InstallDate')?.value||''),
+    afterSales:(document.getElementById(pfx+'AfterSales')?.value||''),
+    note:document.getElementById(pfx+'Note').value.trim(),
+  };
+}
+function setFormData(pfx,r){
+  for(const[k,v] of Object.entries(r)){
+    if (k === 'id' || k === 'createdAt' || k === 'totalRcvd') continue;
+    const el=document.getElementById(pfx+k.charAt(0).toUpperCase()+k.slice(1));
+    if(el){ el.value=v??''; }
+  }
+}
+
+// ═══════════════════════════ 业务操作 ═══════════════════════════
+async function addRecord(){
+  if (!requireAdmin()) return;
+  const fd=getFormData('f');
+  if(!fd.name){ alert('请输入客户姓名'); return; }
+  const record={id:Date.now(),...fd,createdAt:new Date().toISOString()};
+  showLoading(true);
+  const ok = await insertRecord(record);
+  showLoading(false);
+  if (ok) {
+    resetForm();
+    await refreshAll();
+    showToast('✅ 已添加：' + fd.name, 'success');
+  }
+}
+
+function resetForm(){
+  ['fName','fPhone','fWechat','fAccount','fCommunity','fRoom','fMatPrice','fArea','fUnitPrice','fAmount','fDeposit','fBalance','fQuoteNo','fDesigner','fStyle','fInstaller','fNote'].forEach(k=>{ const el=document.getElementById(k); if(el){ el.value=''; if(k==='fAmount') el.dataset.manual=''; } });
+  document.getElementById('fDate').value=''; document.getElementById('fBrand').value=''; document.getElementById('fMaterial').value='';
+  document.getElementById('fStatus').value='到店咨询'; document.getElementById('fAfterSales').value='';
+  document.getElementById('fExpectDate').value=''; document.getElementById('fInstallDate').value='';
+}
+
+function openEditModal(id){
+  if (!requireAdmin()) return;
+  const r=currentData.find(x=>x.id===id); if(!r) return;
+  document.getElementById('editId').value=r.id; setFormData('edit',r);
+  document.getElementById('editAmount').dataset.manual=r.amount?'true':'';
+  document.getElementById('editModal').classList.add('active');
+  setTimeout(()=>document.getElementById('editName').focus(),100);
+  document.addEventListener('keydown',escClose);
+}
+function closeModal(){ document.getElementById('editModal').classList.remove('active'); document.removeEventListener('keydown',escClose); }
+function escClose(e){ if(e.key==='Escape') closeModal(); }
+
+async function saveEdit(){
+  if (!requireAdmin()) return;
+  const id=Number(document.getElementById('editId').value),fd=getFormData('edit');
+  if(!fd.name){ alert('请输入客户姓名'); return; }
+  showLoading(true);
+  const ok = await updateRecord(id, fd);
+  showLoading(false);
+  if (ok) {
+    closeModal();
+    await refreshAll();
+    showToast('✅ 已保存修改', 'success');
+  }
+}
+
+async function deleteRecord(id){
+  if (!requireAdmin()) return;
+  if(!confirm('确定删除？')) return;
+  showLoading(true);
+  const ok = await deleteRecordDB(id);
+  showLoading(false);
+  if (ok) {
+    await refreshAll();
+    showToast('已删除', 'info');
+  }
+}
+
+async function updateField(id,field,val){
+  if (!requireAdmin()) {
+    // Revert the select to original value
+    await refreshAll();
+    return;
+  }
+  showLoading(true);
+  const ok = await updateRecord(id, {[field]: val});
+  showLoading(false);
+  if (ok) await refreshAll();
+}
+
+async function clearAll(){
+  if (!requireAdmin()) return;
+  if(!confirm('⚠️ 确定要清空全部数据吗？\n\n请先导出Excel备份。')) return;
+  if(!confirm('再次确认：删除所有记录？')) return;
+  showLoading(true);
+  const ok = await clearAllDB();
+  showLoading(false);
+  if (ok) await refreshAll();
+}
+
+// ═══════════════════════════ 数据导入 ═══════════════════════════
+function openImportModal() {
+  if (!requireAdmin()) return;
+  document.getElementById('importData').value = '';
+  document.getElementById('importModal').classList.add('active');
+}
+function closeImportModal() { document.getElementById('importModal').classList.remove('active'); }
+
+async function importData() {
+  if (!requireAdmin()) return;
+  const raw = document.getElementById('importData').value.trim();
+  if (!raw) { alert('请粘贴 JSON 数据'); return; }
+  let records;
+  try { records = JSON.parse(raw); } catch(e) { alert('JSON 格式错误，请检查'); return; }
+  if (!Array.isArray(records)) { alert('数据格式错误，需要 JSON 数组'); return; }
+  if (!confirm('即将导入 ' + records.length + ' 条记录，确认？')) return;
+  showLoading(true);
+  // Clear existing data first
+  await clearAllDB();
+  const ok = await importRecords(records);
+  showLoading(false);
+  if (ok) {
+    closeImportModal();
+    await refreshAll();
+    showToast('✅ 成功导入 ' + records.length + ' 条记录', 'success');
+  }
+}
+
+// ═══════════════════════════ 全局刷新 ═══════════════════════════
+async function refreshAll(){
+  await loadData();
+  renderStats();
+  renderToday();
+  renderTable();
+  if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
+}
+
+// ═══════════════════════════ Loading ═══════════════════════════
+function showLoading(show) {
+  document.getElementById('loadingOverlay').classList.toggle('active', show);
+}
+
+// ═══════════════════════════ 统计计算 ═══════════════════════════
+function getStats(data){
+  const today=todayStr(),now=new Date(),thisMonth=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  return {
+    todayCount:data.filter(r=>r.date===today).length,
+    monthCount:data.filter(r=>r.date.startsWith(thisMonth)).length,
+    closedCount:data.filter(r=>CLOSED_STATUSES.includes(r.status)).length,
+    monthAmount:data.filter(r=>r.date.startsWith(thisMonth)&&CLOSED_STATUSES.includes(r.status)).reduce((s,r)=>s+(r.amount||0),0),
+    lostCount:data.filter(r=>r.status==='已流失').length,
+    totalAmount:data.filter(r=>CLOSED_STATUSES.includes(r.status)).reduce((s,r)=>s+(r.amount||0),0),
+    totalRcvd:data.reduce((s,r)=>s+(r.deposit||0)+(r.balance||0),0),
+    totalBalance:data.filter(r=>CLOSED_STATUSES.includes(r.status)).reduce((s,r)=>s+(r.balance||0),0),
+  };
+}
+
+// ═══════════════════════════ 渲染 ═══════════════════════════
+function renderStats(){
+  const s=getStats(currentData);
+  document.getElementById('statCards').innerHTML=`
+    <div class="stat-card c1"><div class="s-label">📅 今日到店</div><div class="s-value">${s.todayCount}</div><div class="s-sub">人</div></div>
+    <div class="stat-card c2"><div class="s-label">📆 本月累计到店</div><div class="s-value">${s.monthCount}</div><div class="s-sub">人</div></div>
+    <div class="stat-card c3"><div class="s-label">✅ 已成交客户</div><div class="s-value">${s.closedCount}</div><div class="s-sub">签单率 ${s.monthCount?Math.round(s.closedCount/s.monthCount*100):0}%</div></div>
+    <div class="stat-card c4"><div class="s-label">💰 累计合同金额</div><div class="s-value">${fmtMoney(s.totalAmount)}</div><div class="s-sub">已收款 ${fmtMoney(s.totalRcvd)}</div></div>
+    <div class="stat-card c5"><div class="s-label">❌ 已流失</div><div class="s-value">${s.lostCount}</div><div class="s-sub">人</div></div>`;
+}
+
+function renderToday(){
+  const data=currentData,today=todayStr(),todayRecords=data.filter(r=>r.date===today);
+  if(!todayRecords.length){ document.getElementById('todayList').innerHTML='<div class="empty-state"><div class="icon">📭</div>今天还没有到店记录<br>在左侧表单添加第一条吧</div>'; return; }
+  document.getElementById('todayList').innerHTML=todayRecords.map((r,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f2f5;font-size:13px;">
+      <strong>${i+1}. ${r.name}</strong>
+      ${r.community?`<span style="color:var(--info);font-size:11px;">${r.community}</span>`:''}
+      ${r.brand?`<span style="color:var(--accent);font-size:11px;font-weight:600;">${r.brand}</span>`:''}
+      ${r.material?`<span style="background:#f0f2f5;padding:2px 8px;border-radius:10px;font-size:11px;">${r.material}</span>`:''}
+      <span class="badge ${STATUS_BADGE[r.status]||''}">${r.status}</span>
+      <span style="color:var(--muted);font-size:11px;">${r.source}</span>
+      <span style="font-size:12px;margin-left:auto;">${fmtMoney(r.amount)}</span>
+      <button class="btn btn-xs" style="background:#eef2ff;color:var(--info);" onclick="openEditModal(${r.id})">✏️</button>
+      <button class="btn btn-xs btn-ghost" onclick="deleteRecord(${r.id})">✕</button>
+    </div>`).join('');
+}
+
+function renderTable(){
+  const data=currentData;
+  const fDate=document.getElementById('filterDate').value,fStatus=document.getElementById('filterStatus').value;
+  const fSource=document.getElementById('filterSource').value,fMaterial=document.getElementById('filterMaterial').value;
+  const fBrand=document.getElementById('filterBrand').value;
+  const fCommunity=document.getElementById('filterCommunity').value.trim(),fName=document.getElementById('filterName').value.trim();
+  let filtered=data;
+  if(fDate) filtered=filtered.filter(r=>r.date===fDate); if(fStatus) filtered=filtered.filter(r=>r.status===fStatus);
+  if(fSource) filtered=filtered.filter(r=>r.source===fSource); if(fBrand) filtered=filtered.filter(r=>r.brand===fBrand);
+  if(fMaterial) filtered=filtered.filter(r=>r.material===fMaterial);
+  if(fCommunity) filtered=filtered.filter(r=>(r.community||'').toLowerCase().includes(fCommunity.toLowerCase()));
+  if(fName) filtered=filtered.filter(r=>r.name.toLowerCase().includes(fName.toLowerCase()));
+  document.getElementById('recordCount').textContent=`共 ${filtered.length} 条记录`;
+  if(!filtered.length){ document.getElementById('tableBody').innerHTML='<tr><td colspan="14" style="text-align:center;padding:40px;color:var(--muted);">暂无匹配记录</td></tr>'; return; }
+  document.getElementById('tableBody').innerHTML=filtered.map(r=>`
+    <tr><td>${r.date}</td><td><strong>${r.name}</strong></td><td>${r.phone||'—'}</td><td>${r.community||'—'}</td><td>${r.source}</td>
+      <td>${r.brand||'—'}</td><td>${r.material||'—'}</td><td>${r.area?r.area+'㎡':'—'}</td><td>${fmtMoney(r.amount)}</td><td>${fmtMoney(r.deposit)}</td>
+      <td><select class="badge ${STATUS_BADGE[r.status]||''}" style="border:none;font-weight:600;cursor:pointer;font-size:11px;font-family:inherit;" onchange="updateField(${r.id},'status',this.value)" ${isAdmin?'':'disabled'}>${STATUSES.map(s=>`<option value="${s}" ${s===r.status?'selected':''}>${s}</option>`).join('')}</select></td>
+      <td>${r.designer||'—'}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.note||'').replace(/"/g,'&quot;')}">${r.note||'—'}</td>
+      <td><button class="btn btn-xs" style="background:#eef2ff;color:var(--info);" onclick="openEditModal(${r.id})">✏️ 编辑</button><button class="btn btn-xs btn-ghost" style="color:var(--danger);" onclick="deleteRecord(${r.id})">删除</button></td></tr>`).join('');
+}
+
+function renderDashboard(){
+  const data=currentData,s=getStats(data);
+  document.getElementById('dashStats').innerHTML=`
+    <div class="stat-card c1"><div class="s-label">📋 总客户数</div><div class="s-value">${data.length}</div><div class="s-sub">全部记录</div></div>
+    <div class="stat-card c3"><div class="s-label">✅ 已成交</div><div class="s-value">${s.closedCount}</div><div class="s-sub">签单率 ${data.length?Math.round(s.closedCount/data.length*100):0}%</div></div>
+    <div class="stat-card c4"><div class="s-label">💰 合同总额</div><div class="s-value">${fmtMoney(s.totalAmount)}</div><div class="s-sub">已收 ${fmtMoney(s.totalRcvd)} · 尾款 ${fmtMoney(s.totalBalance)}</div></div>
+    <div class="stat-card c2"><div class="s-label">📆 本月到店</div><div class="s-value">${s.monthCount}</div><div class="s-sub">本月已签 ${data.filter(r=>r.date.startsWith(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'))&&CLOSED_STATUSES.includes(r.status)).length} 单</div></div>
+    <div class="stat-card c5"><div class="s-label">❌ 流失</div><div class="s-value">${s.lostCount}</div><div class="s-sub">流失率 ${data.length?Math.round(s.lostCount/data.length*100):0}%</div></div>`;
+
+  // Source chart
+  const sourceStats={}; SOURCES.forEach(src=>{ const all=data.filter(r=>r.source===src),closed=all.filter(r=>CLOSED_STATUSES.includes(r.status)); sourceStats[src]={total:all.length,closed:closed.length,amount:closed.reduce((s,r)=>s+(r.amount||0),0)}; });
+  const maxSrc=Math.max(1,...Object.values(sourceStats).map(x=>x.total));
+  document.getElementById('sourceChart').innerHTML=Object.entries(sourceStats).map(([src,st])=>`<div class="progress-row"><div class="p-label">${src}</div><div class="p-bar-wrap"><div class="p-bar-fill" style="width:${Math.round(st.total/maxSrc*100)}%;background:var(--info);"><span>${st.total}人</span></div></div><div class="p-val">签${st.closed}单 ${fmtMoney(st.amount)}</div></div>`).join('');
+
+  // Material chart
+  const matStats={}; data.filter(r=>r.brand||r.material).forEach(r=>{ const key=[r.brand||'未知品牌',r.material||'未知基材'].filter(Boolean).join('/'); if(!matStats[key]) matStats[key]={total:0,closed:0,amount:0}; matStats[key].total++; if(CLOSED_STATUSES.includes(r.status)){matStats[key].closed++;matStats[key].amount+=(r.amount||0);} });
+  const matSorted=Object.entries(matStats).sort((a,b)=>b[1].total-a[1].total),maxMat=Math.max(1,...matSorted.map(x=>x[1].total));
+  document.getElementById('materialChart').innerHTML=matSorted.length?matSorted.map(([m,st])=>`<div class="progress-row"><div class="p-label">${m}</div><div class="p-bar-wrap"><div class="p-bar-fill" style="width:${Math.round(st.total/maxMat*100)}%;background:var(--success);"><span>${st.total}单</span></div></div><div class="p-val">${fmtMoney(st.amount)}</div></div>`).join(''):'<div class="empty-state">暂无选材数据</div>';
+
+  // Monthly chart
+  const now=new Date(),year=now.getFullYear();
+  const months=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  const monthlyData=months.map((_,i)=>{ const prefix=year+'-'+String(i+1).padStart(2,'0'),all=data.filter(r=>r.date.startsWith(prefix)),closed=all.filter(r=>CLOSED_STATUSES.includes(r.status)); return {month:months[i],total:all.length,closed:closed.length,amount:closed.reduce((s,r)=>s+(r.amount||0),0)}; });
+  const maxMo=Math.max(1,...monthlyData.map(x=>x.total),...monthlyData.map(x=>x.closed));
+  document.getElementById('monthlyChart').innerHTML=`<div style="display:flex;align-items:flex-end;gap:12px;height:200px;padding-top:24px;">${monthlyData.map(m=>`<div class="bar-col"><div style="display:flex;gap:3px;align-items:flex-end;height:160px;"><div class="bar-fill" style="height:${Math.round(m.total/maxMo*160)}px;background:var(--info);opacity:.7;max-width:22px;" title="到店 ${m.total}人"><div class="bar-val">${m.total}</div></div><div class="bar-fill" style="height:${Math.round(m.closed/maxMo*160)}px;background:var(--success);max-width:22px;" title="签单 ${m.closed}人"><div class="bar-val" style="color:var(--success);">${m.closed}</div></div></div><div class="bar-label">${m.month}</div></div>`).join('')}</div><div style="display:flex;gap:20px;justify-content:center;margin-top:8px;font-size:12px;color:var(--muted);"><span>🟦 到店人数</span><span>🟩 签单人数</span></div>`;
+
+  // Funnel
+  const funnelStages=['到店咨询','已量尺','已出方案','已报价','已签单','复尺下单中','已安装','已完成'];
+  const funnelData=funnelStages.map(stage=>({stage,count:data.filter(r=>r.status===stage).length})),maxFunnel=Math.max(1,...funnelData.map(x=>x.count));
+  document.getElementById('funnelChart').innerHTML=funnelData.map((f,i)=>`<div class="progress-row"><div class="p-label">${f.stage}</div><div class="p-bar-wrap"><div class="p-bar-fill" style="width:${Math.round(f.count/maxFunnel*100)}%;background:${['#3b6df0','#5b8af7','#7da4f9','#a0befb','#2ecc71','#27ae60','#1abc9c','#15803d'][i]};"><span>${f.count}人</span></div></div><div class="p-val">${maxFunnel===f.count&&f.count>0?'👑':''}</div></div>`).join('');
+
+  // Signed table
+  const signed=data.filter(r=>CLOSED_STATUSES.includes(r.status)).slice(0,20);
+  document.getElementById('signedTable').innerHTML=signed.length?signed.map(r=>`<tr><td>${r.date}</td><td><strong>${r.name}</strong></td><td>${r.community||'—'}</td><td>${r.brand||'—'}</td><td>${r.material||'—'}</td><td>${r.area?r.area+'㎡':'—'}</td><td>${fmtMoney(r.amount)}</td><td>${fmtMoney(r.deposit)}</td><td>${fmtMoney(r.balance)}</td><td>${r.designer||'—'}</td><td><span class="badge ${STATUS_BADGE[r.status]||''}">${r.status}</span></td></tr>`).join(''):'<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">暂无签单客户</td></tr>';
+}
+
+// ═══════════════════════════ 导出功能 ═══════════════════════════
+function exportCSV(){
+  const data=currentData; if(!data.length){ alert('没有数据可导出'); return; }
+  const header=['序号','录入日期','客户来源','推广账号','小区名称','楼号/房号','联系电话','微信号','品牌','基材','板材单价','投影面积(㎡)','投影单价(元/㎡)','合同金额','定金','尾款','收款合计','当前状态','报价单号','预计签单','设计师','风格','安装师傅','安装日期','售后状态','备注'];
+  let seq=0;
+  const rows=data.map(r=>[++seq,r.date,r.source,r.account,r.community,r.room,r.phone,r.wechat,r.brand||'',r.material||'',r.matPrice||'',r.area||'',r.unitPrice||'',r.amount||'',r.deposit||'',r.balance||'',r.totalRcvd||'',r.status,r.quoteNo,r.expectDate,r.designer,r.style,r.installer,r.installDate,r.afterSales,r.note]);
+  const BOM='﻿',csv=BOM+[header,...rows].map(row=>row.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='凯达森运营统计_'+todayStr()+'.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+
+function exportExcel(){
+  const data=currentData; if(!data.length){ alert('没有数据可导出'); return; }
+  if(typeof XLSX==='undefined'){ alert('Excel导出组件加载中，请联网后刷新页面再试。\n\n或使用「导出CSV」按钮。'); return; }
+  const header1=['序号','录入日期','客户来源','推广账号','小区名称','楼号/房号','联系电话','微信号','品牌','基材','板材单价','投影面积(㎡)','投影单价(元/㎡)','合同金额','定金','尾款','收款合计','当前状态','报价单号','预计签单','设计师','风格','安装师傅','安装日期','售后状态','备注'];
+  let seq=0;
+  const rows1=data.map(r=>[++seq,r.date,r.source,r.account,r.community,r.room,r.phone,r.wechat,r.brand||'',r.material||'',r.matPrice||'',r.area||'',r.unitPrice||'',r.amount||'',r.deposit||'',r.balance||'',r.totalRcvd||'',r.status,r.quoteNo,r.expectDate,r.designer,r.style,r.installer,r.installDate,r.afterSales,r.note]);
+  const ws1=XLSX.utils.aoa_to_sheet([header1,...rows1]); ws1['!cols']=header1.map((_,i)=>({wch:i===26?20:12}));
+  const s=getStats(data);
+  const data2=[['凯达森全屋定制 — 线上运营成交数据看板'],['生成时间：'+new Date().toLocaleString('zh-CN')],[],['总客户数',data.length,'已成交',s.closedCount,'签单率',data.length?Math.round(s.closedCount/data.length*100)+'%':'0%'],['合同总额',s.totalAmount,'已收款合计',s.totalRcvd,'待收尾款',s.totalBalance],['本月到店',s.monthCount,'本月签单金额',s.monthAmount,'流失数',s.lostCount],[],['客户来源分析'],['来源','到店数','签单数','签单率','合同金额']];
+  SOURCES.forEach(src=>{ const all=data.filter(r=>r.source===src),closed=all.filter(r=>CLOSED_STATUSES.includes(r.status)),amount=closed.reduce((s,r)=>s+(r.amount||0),0); data2.push([src,all.length,closed.length,all.length?Math.round(closed.length/all.length*100)+'%':'0%',amount]); });
+  data2.push([],['品牌+基材选用分析'],['品牌/基材','选用次数','签单数','合同金额']);
+  const matMap={}; data.filter(r=>r.brand||r.material).forEach(r=>{ const key=[r.brand||'未知品牌',r.material||'未知基材'].filter(Boolean).join('/'); if(!matMap[key]) matMap[key]={total:0,closed:0,amount:0}; matMap[key].total++; if(CLOSED_STATUSES.includes(r.status)){matMap[key].closed++;matMap[key].amount+=(r.amount||0);} });
+  Object.entries(matMap).sort((a,b)=>b[1].total-a[1].total).forEach(([m,st])=>{ data2.push([m,st.total,st.closed,st.amount]); });
+  const ws2=XLSX.utils.aoa_to_sheet(data2); ws2['!cols']=[{wch:16},{wch:12},{wch:12},{wch:12},{wch:12},{wch:14}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws1,'订单明细'); XLSX.utils.book_append_sheet(wb,ws2,'数据看板');
+  XLSX.writeFile(wb,'凯达森运营报表_'+todayStr()+'.xlsx');
+}
+
+// ═══════════════════════════ 初始化 ═══════════════════════════
+async function init() {
+  bindCalc('f'); bindCalc('edit');
+  document.getElementById('todayDate').textContent='📅 '+todayStr();
+  document.getElementById('fDate').value=todayStr();
+
+  // Edit modal backdrop click
+  document.getElementById('editModal').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
+  document.getElementById('importModal').addEventListener('click',function(e){ if(e.target===this) closeImportModal(); });
+
+  // Init Supabase
+  if (!initSupabase()) {
+    renderStatsEmpty();
+    return;
+  }
+
+  // Restore admin session
+  restoreAdmin();
+
+  // Load data
+  showLoading(true);
+  await refreshAll();
+  showLoading(false);
+
+  // Subscribe to realtime changes
+  subscribeRealtime();
+}
+
+function renderStatsEmpty() {
+  document.getElementById('statCards').innerHTML = `
+    <div class="stat-card c1"><div class="s-label">📅 今日到店</div><div class="s-value">—</div><div class="s-sub">请先配置数据库</div></div>
+    <div class="stat-card c2"><div class="s-label">📆 本月累计到店</div><div class="s-value">—</div><div class="s-sub">—</div></div>
+    <div class="stat-card c3"><div class="s-label">✅ 已成交客户</div><div class="s-value">—</div><div class="s-sub">—</div></div>
+    <div class="stat-card c4"><div class="s-label">💰 累计合同金额</div><div class="s-value">—</div><div class="s-sub">—</div></div>
+    <div class="stat-card c5"><div class="s-label">❌ 已流失</div><div class="s-value">—</div><div class="s-sub">—</div></div>`;
+}
+
+// Start
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
