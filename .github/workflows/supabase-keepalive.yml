@@ -1,0 +1,19 @@
+# 每天自动访问一次 Supabase 数据库，防止免费项目因 7 天不活跃被暂停/删除
+# 北京时间每天 10:37 运行（UTC 02:37）
+name: Supabase Keepalive
+
+on:
+  schedule:
+    - cron: '37 2 * * *'
+  workflow_dispatch:   # 支持手动触发
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" \
+            "${{ vars.SUPABASE_URL }}/rest/v1/customers?select=id&limit=1" \
+            -H "apikey: ${{ vars.SUPABASE_KEY }}" \
+            -H "Authorization: Bearer ${{ vars.SUPABASE_KEY }}"
